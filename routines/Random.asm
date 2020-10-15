@@ -6,15 +6,13 @@
     SEP #$30
     PHA
     JSL $01ACF9|!BankB
+	LDA $148D|!Base2
     PLX
     CPX #$FF
-    BNE .normal
-    LDA $148D|!Base2
-    BRA .end
+    BEQ .end
  
 .normal
     INX
-    LDA $148D|!Base2
  
     if !SA1 == 0
         STA $4202               ; Write first multiplicand.
@@ -27,7 +25,7 @@
         STZ $2252
         STX $2253               ; Write second multiplicand.
         STZ $2254
-        NOP : BRA $00           ; Wait 5 cycles.
+        NOP                     ; Wait 2 cycles, which is enough according to SnesLab docs about sa-1 registers.
         LDA $2307               ; Read multiplication product.
     endif
 .end

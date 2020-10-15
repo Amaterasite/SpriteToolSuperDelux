@@ -1,6 +1,12 @@
 #include <string.h>
 #include <cctype>
 #include "structs.h"
+#include <sstream>
+#include <iomanip>
+
+inline const char * const BOOL_STR(bool b) {
+   return b ? "true" : "false";
+}
 
 void ROM::open(const char *n)
 {
@@ -42,8 +48,6 @@ pointer ROM::pointer_pc(int address, int size, int bank)
 	return pointer(::get_pointer(data, address, size, bank));
 }
 
-
-
 void set_pointer(pointer* p, int address) {
 	p->lowbyte = (char)(address & 0xFF);
 	p->highbyte = (char)((address >> 8) & 0xFF);
@@ -81,7 +85,7 @@ char* trim(char *text) {
 		text++;
 	}
 	for(int i = strlen(text); isspace(text[i-1]); i--){	//trim back
-		text[i] = 0;
+		text[i-1] = 0;
 	}
 	return text; 
 }
@@ -125,8 +129,6 @@ void sprite::print(FILE* stream) {
       }
    }
    
-   #define BOOL_STR(b) ((b) ? "true" : "false")
-   
    if(display_count) {
       fprintf(stream, "Displays:\n");
       for(int i = 0; i < display_count; i++){
@@ -147,13 +149,15 @@ void sprite::print(FILE* stream) {
       fprintf(stream, "Collections:\n");
       for(int i = 0; i < collection_count; i++){
          collection* c = collections + i;
-         fprintf(stream, "\tExtra-Bit: %s, Property Bytes: (%02X %02X %02X %02X) Name: %s\n", BOOL_STR(c->extra_bit),
-            c->prop[0], c->prop[1], c->prop[2], c->prop[3],
-            c->name);
+         std::stringstream coll;
+         coll << "\tExtra-Bit: " << BOOL_STR(c->extra_bit) << ", Property Bytes: ( ";
+         for (int j = 0; j < (c->extra_bit ? extra_byte_count : byte_count); j++) {
+            coll << std::hex << std::uppercase << std::setw(2) << std::setfill('0') << static_cast<int>(c->prop[j]) << " ";
+         }
+         coll << ") Name: " << c->name << std::endl;
+         fprintf(stream, coll.str().c_str());
       }
    }
-   
-   #undef BOOL_STR
 }
 
 tile::~tile() {

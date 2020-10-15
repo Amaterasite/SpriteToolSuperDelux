@@ -12,6 +12,7 @@ ReadMe Contents:
 -- Using the Command Prompt
 
 - New Additions and Changes
+-- Custom status handling and extra property bytes
 -- Softcoding
 -- Per-Level Sprites
 -- SA-1 Detection and Default Labels
@@ -20,6 +21,7 @@ ReadMe Contents:
 -- Shared Routines
 -- Header Files
 -- Extra Bytes
+-- Extend PIXI (extra defines and hijacks)
 
 - Common Errors
 -- JMP (label,x) or JSR (label,x)
@@ -53,9 +55,10 @@ ReadMe Contents:
 		
 
 -- Per-Level Sprites (has to be enabled with -pl)
-	The slots B0 to BF are special, in that you have to assign a level to them. The sprite will only use
+	The slots B0 to BF are special, in that if you assign a level to them, they will become per-level sprites. The sprite will only use
 	the sprite slot between B0 and BF in that one specified level. Meaning you can assign sprite slot B0 of level 105
 	to a Thwomp and B0 of level 106 to a Hammer Bro if you wanted. Keep in mind this only holds true for slots B0 to BF.
+	Do note that per-level sprites support at max 4 extra bytes.
 	The format for per-level sprites looks as follows:
 	
 		level COLON id SPACE cfg_file
@@ -69,6 +72,14 @@ ReadMe Contents:
 		105:B0 Red.cfg
 		105:B1 Yellow.cfg
 		106:B0 Boo.cfg
+
+		or 
+
+		B0 Blue.cfg 
+		105:B0 Red.cfg
+
+		Note that the above is still perfectly valid, sprite B0 will behave like Blue.asm in any level except for 105, where it will take Red.asm properties and code instead.
+		This is because since Pixi 1.3, slots B0-BF are not exclusive to per-level sprites anymore but they can be used by normal sprites aswell instead
 
 -- Other sprite types
 	PIXI also has the ability to insert other types of sprites, such as cluster or extended sprites.
@@ -111,10 +122,12 @@ ReadMe Contents:
 		Usage: pixi <options> <ROM>
 		Options are:
 		-d              Enable debug output
+		-out <filename>	This can be placed after "-d" and with it you can define a file to redirect the debug output instead of the prompt. This flag only works if the debug output flag is enabled.
 		-k              Keep debug files
 		-l  <listpath>  Specify a custom list file (Default: list.txt)
 		-pl				Per level sprites - will insert perlevel sprite code
 		-npl            Same as the current default, no sprite per level will be inserted, left dangling for compatibility reasons
+		-d255spl		disables 255 sprite per level support (won't do the 1938 remap)
 
 		-a  <asm>       Specify a custom asm directory (Default asm/)
 		
@@ -125,16 +138,27 @@ ReadMe Contents:
 		-c  <cluster>   Specify a custom cluster sprites directory (Default cluster/)
 
 		-r  <sharedpath>        Specify a shared routine directory (Default routines/)
-
+		
 		-ssc <append ssc>       Specify ssc file to be copied into <romname>.ssc
 		-mwt <append mwt>       Specify mwt file to be copied into <romname>.mwt
 		-mw2 <append mw2>       Specify mw2 file to be copied into <romname>.mw2
 		-s16 <base s16>         Specify s16 file to be used as a base for <romname>.s16
 		                        Do not use <romname>.xxx as an argument as the file will be overwriten
 		
-	Example:
+		MeiMei: meimei is an embedded tool pixi uses to fix sprite data for levels when sprite data size is changed for sprites already in use. That happens when you have a level that already uses a certain sprite and you change the amount of extra bytes said sprite uses.
+		Options are:
+		-meimei-off		Shuts down MeiMei completely
+		-meimei-a		Enables always remap sprite data
+		-meimei-k		Enables keep temp patches files
+		-meimei-d		Enables debug for MeiMei patches - I recommend you turn this on if you wanna know what levels were edited and how.
 		
-		pixi.exe -l differentlistfile.txt rom.smc
+		They are all still considered pixi options by the way, so you would them the as any of ther other options above the MeiMei section.
+
+	Examples:
+		
+		pixi.exe -l differentlistfile.txt rom.smc							-> will use "differentlistfile.txt" instead of "list.txt"
+
+		pixi.exe -d -out debug_out.txt -k -l differentlistfile.txt rom.smc	-> will print debug output to "debug_out.txt", keep debug files and use "differentlistfile.txt"
 		
 		
 		
@@ -142,6 +166,29 @@ ReadMe Contents:
 - New Additions and Changes
 If you are used to using Romi's SpriteTool, here is a quick rundown of everything new added in PIXI:
 
+-- Custom status handling and extra property bytes:
+  As most people know, Pixi relies on 2 print statements to tell the game what code to run in which state of the sprite.
+  Most importantly, state 08 will run whatever code is under the "MAIN" print statement and state 01 will run whatever code is under the "INIT" print statement.
+  All the other states will run the corresponding vanilla code, however, some bits in !extra_prop_2 can be set to activate certain functions. Setting bit 7 of that byte will make the sprite run its MAIN code in any state and it won't run the vanilla code, setting bit 6 will make it run both vanilla code and the custom MAIN.
+  Since Pixi 1.2.16 you can have more control over other states that are not 08 and 01 by using new print statements crafted just for the occasion, valid print statements FOR NORMAL CUSTOM SPRITES are:
+      > print "CARRIABLE", pc  which will run in state 09
+	  > print "KICKED", pc  which will run in state 0A
+	  > print "CARRIED", pc which will run in state 0B
+	  > print "MOUTH", pc which will run in state 07
+	  > print "GOAL", pc which will run in state 0C
+  Note that while using these print statements, the data bank will be automatically set, so you don't need to manually set it like for MAIN or INIT.
+  Please be aware that the use of these labels completely and totally overrides ANY vanilla code that would run in the respective states (unless you set the aforementioned bits in the property bytes), 
+  so if you use them you have to code all of the wanted behaviors yourself, this is done on purpose so the code has complete control and they won't have unwanted side-effects due to vanilla code.
+  You can find the code that vanilla rom uses to handle those states at the following rom locations, you can use those to see how to do implement whatever you feel like vanilla gave you and you're missing now, maybe even better than how the original game did things:
+  - $01953C for carriable/stunned
+  - $019913 for kicked
+  - $019F71 for carried
+  - $018157 for goal tape (only activates when the sprite has "turn into a powerup at goal tape" bit on.
+  Fun fact, the game just returns when in Yoshi's Mouth so you can do anything you want here. Be aware that "MOUTH" activates only when the sprite is set to stay in Yoshi's mouth.
+  If you don't use these print statement your sprite will just run the respective state's vanilla code, just as normal, for retro-compatibility purposes.
+  There's also another special print statement that works only for EXTENDED sprites, which is print "CAPE", pc and its purpose is to fix a bug with cape interaction with custom extended sprites. You can use it to define the behavior of your extended sprite with cape twirl,
+  not using it will default cape interaction of the extended sprite to do nothing.
+ 
 -- Softcoding
   All the ASM code inserted by the tool is available to be edited by hand in the asm/ folder, namely main.asm.
   This means that if you need to hijack or change some code PIXI inserts, you can do it just like you would with
@@ -153,6 +200,7 @@ If you are used to using Romi's SpriteTool, here is a quick rundown of everythin
   those same 16 sprite slots can point to different sprite code in different levels.
   This can be especially useful for collaboration hacks or for one-off sprites that don't need to occupy
   their own global slot, especially if sprite slot space is running low.
+  Per-level sprites can only use 4 extra bytes.
 
 
 -- SA-1 Detection and Default Labels
@@ -233,7 +281,81 @@ If you are used to using Romi's SpriteTool, here is a quick rundown of everythin
 	!extra_byte_2
 	!extra_byte_3
 	!extra_byte_4
-		
+	
+	As of version 1.2.10, we now have 3 extra bytes for shooters. Everything that applies for normal sprite extra bytes applies for this.
+	
+	!shooter_extra_byte_1
+	!shooter_extra_byte_2
+	!shooter_extra_byte_3
+	
+
+	Indirect data pointer:
+	From pixi 1.2.11 onwards, you are allowed to use n extra bytes, both for shooters and sprites - however limited at 12 (not in hex)
+	extra bytes, because lunar magic only allows us to go that far with the input box.
+	This feature isn't valid for per-level sprites, since by design every per-level sprite would have the same number of extra bytes and allowing 12 bytes for each per-level sprite would break every other sprite that used < 5 extra bytes.
+	No additional RAM is reserved for this model.
+
+	So for sprites from 5 onwards extra bytes, the first 3 extra bytes will be used as an indirect pointer to the sprite data, starting at 1.
+	For shooters, from 4 onwards, same rule.
+
+	Be careful when declaring 10+ extra bytes in the cfg/json format. Cfg format will expect hex numbers, json will expect decimal.
+
+	Exemple for sprites:
+			LDA !extra_byte_1,x
+			STA $00
+			LDA !extra_byte_2,x
+			STA $01
+			LDA !extra_byte_3,x
+			STA $02
+			LDY #$0B
+			LDA [$00],y
+	
+	The code above would read the 12th extra byte for a sprite.
+
+	
+	Exemplo for shooters:
+			LDA !shooter_extra_byte_1,x
+			STA $00
+			LDA !shooter_extra_byte_2,x
+			STA $01
+			LDA !shooter_extra_byte_3,x
+			STA $02
+			LDY #$07
+			LDA [$00],y
+
+	The code above would read the 8th extra byte for a shooter.
+
+
+	So you could say that in this model, extra_byte_4 for sprites is a free table that won't get cleanups. I didn't add more ram for this feature because sprites already have a whole load of RAM reserved and they are mostly unused all the time.
+	If you in turn think you need more RAM, just extend pixi. Check the section right below this one to see how to do that.
+	
+	It can potentially be harmful for shooters, since shooters do not possess the same amount of free ram tables as sprites do.
+	But honestly, I think you should consider if it's really an issue (performance-wise), since to begin with shooters don't even have init pointers, they only have mains.
+	If even then you think it is a performance issue, extend pixi, add your own reserved RAMs for shooters, add a hijack for cleaning up the tables and be happy.
+	Check the Extend pixi section right below this to see how to do that.
+
+
+-- Extend PIXI (extra defines and hijacks)
+	From pixi 1.2.11+ we have two 'secret' folders called ExtraDefines and ExtraHijacks. They do not come in with pixi by default, they have to be created.
+
+	Folder structure:
+		./asm/ExtraDefines
+		./asm/ExtraHijacks
+
+	They each have their own unique behavior.
+
+	For ExtraDefines, whatever .asm files you put in there, will be included in every single sprite as valid defines/macros. So be sure to only use these as defines
+	and macros.
+
+	For ExtraHijacks, before MeiMei runs, this is the last thing inserted to the rom, right after all pixi asms. All .asm files inside this folder will be inserted then.
+	So be careful with cleaning up stuff, overwriting stuff, clashing with other hijacks and so on.
+
+	Combaning those two things you could set up your own sprite/shooters/whatever tables and clean them up wherever you want - so they can be used with your resources.
+	And a lot more.
+	Essentially, there's no difference from adding a patch to be inserted with your sprite and adding something to the ExtraHijacks folder, except for the
+	convinience, of course. Please do not abuse this feature.
+	Since pixi does not touch .asm files, you will have to include sa1def or whatever else defines you defined at ExtraDefines inside your patch, if you wanna use them.
+
 		
 - Common Errors
 The vast majority of the time, xkas code will work just fine with Asar, the assembler that PIXI uses exclusively.

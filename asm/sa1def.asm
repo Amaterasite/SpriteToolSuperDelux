@@ -1,3 +1,10 @@
+if canreadfile1("config.asm",0) != 0
+	incsrc "config.asm"
+endif
+
+!PerLevel ?= 0
+!Disable255SpritesPerLevel ?= 0
+
 ;only works for SA-1 version 1.10+
 
 !CustomBit		= $08
@@ -35,26 +42,55 @@ if (((read1($0FF0B4)-'0')*100)+((read1($0FF0B4+2)-'0')*10)+(read1($0FF0B4+3)-'0'
 	!EXLEVEL = 1
 endif
 
+macro invoke_snes(addr)
+	LDA.b #<addr>
+	STA $0183
+	LDA.b #<addr>/256
+	STA $0184
+	LDA.b #<addr>/65536
+	STA $0185
+	LDA #$D0
+	STA $2209
+-	LDA $018A
+	BEQ -
+	STZ $018A
+endmacro
+
+
 if read1($00FFD5) == $23		; check if the rom is sa-1
 	sa1rom
+	!sa1 = 1
 	!SA1 = 1
 	!SA_1 = 1
 	!Base1 = $3000
 	!Base2 = $6000
+	!dp = $3000
+	!addr = $6000
 	
 	!BankA = $400000
 	!BankB = $000000
+	!bank = $000000
+	
+	!Bank8 = $00
+	!bank8 = $00
 	
 	!SprSize = $16
 else
 	lorom
+	!sa1 = 0
 	!SA1 = 0
 	!SA_1 = 0
 	!Base1 = $0000
 	!Base2 = $0000
-	
+	!dp = $0000
+	!addr = $0000
+
 	!BankA = $7E0000
 	!BankB = $800000
+	!bank = $800000
+	
+	!Bank8 = $80
+	!bank8 = $80
 	
 	!SprSize = $0C
 endif
@@ -75,33 +111,40 @@ macro define_base2_address(name, addr)
 	endif
 endmacro
 
-
+!GenStart = $D0
 !ClusterOffset  = $09
 !ExtendedOffset = $13
 
 ;$9E,x =  ($B4)
 
-
 ;sprite tool / pixi defines
-%define_sprite_table("7FAB10",$7FAB10,$400040)
-%define_sprite_table("7FAB1C",$7FAB1C,$400056)
-%define_sprite_table("7FAB28",$7FAB28,$400057)
-%define_sprite_table("7FAB34",$7FAB34,$40006D)
-%define_sprite_table("7FAB9E",$7FAB9E,$400083)
-%define_sprite_table("7FAB40",$7FAB40,$400099)
-%define_sprite_table("7FAB4C",$7FAB4C,$4000AF)
-%define_sprite_table("7FAB58",$7FAB58,$4000C5)
-%define_sprite_table("7FAB64",$7FAB64,$4000DB)
+%define_sprite_table("7FAB10",$7FAB10,$6040)
+%define_sprite_table("7FAB1C",$7FAB1C,$6056)
+%define_sprite_table("7FAB28",$7FAB28,$6057)
+%define_sprite_table("7FAB34",$7FAB34,$606D)
+%define_sprite_table("7FAB9E",$7FAB9E,$6083)
+%define_sprite_table("7FAB40",$7FAB40,$6099)
+%define_sprite_table("7FAB4C",$7FAB4C,$60AF)
+%define_sprite_table("7FAB58",$7FAB58,$60C5)
+%define_sprite_table("7FAB64",$7FAB64,$60DB)
 
-%define_sprite_table("extra_bits",$7FAB10,$400040)
-%define_sprite_table("new_code_flag",$7FAB1C,$400056)
-%define_sprite_table("extra_prop_1",$7FAB28,$400057)
-%define_sprite_table("extra_prop_2",$7FAB34,$40006D)
-%define_sprite_table("new_sprite_num",$7FAB9E,$400083)
-%define_sprite_table("extra_byte_1",$7FAB40,$400099)
-%define_sprite_table("extra_byte_2",$7FAB4C,$4000AF)
-%define_sprite_table("extra_byte_3",$7FAB58,$4000C5)
-%define_sprite_table("extra_byte_4",$7FAB64,$4000DB)
+%define_sprite_table("7FAC00",$7FAC00,$60F1)
+%define_sprite_table("7FAC08",$7FAC08,$6030)
+%define_sprite_table("7FAC10",$7FAC10,$6038)
+
+%define_sprite_table("extra_bits",$7FAB10,$6040)
+%define_sprite_table("new_code_flag",$7FAB1C,$6056)
+%define_sprite_table("extra_prop_1",$7FAB28,$6057)
+%define_sprite_table("extra_prop_2",$7FAB34,$606D)
+%define_sprite_table("new_sprite_num",$7FAB9E,$6083)
+%define_sprite_table("extra_byte_1",$7FAB40,$6099)
+%define_sprite_table("extra_byte_2",$7FAB4C,$60AF)
+%define_sprite_table("extra_byte_3",$7FAB58,$60C5)
+%define_sprite_table("extra_byte_4",$7FAB64,$60DB)
+
+%define_sprite_table("shooter_extra_byte_1",$7FAC00,$60F1)
+%define_sprite_table("shooter_extra_byte_2",$7FAC08,$6030)
+%define_sprite_table("shooter_extra_byte_3",$7FAC10,$6038)
 
 ;%define_sprite_table(shoot_misc,$7FAB64,$4000DB)
 
@@ -158,9 +201,6 @@ endmacro
 ; %define_sprite_table(ow_y_speed_acc, $9E, $3500)
 ; %define_sprite_table(ow_z_speed_acc, $9E, $3500)
 
-
-
-
 ;normal sprite defines
 %define_sprite_table(sprite_num, $9E, $3200)
 %define_sprite_table(sprite_speed_y, $AA, $9E)
@@ -208,7 +248,9 @@ endmacro
 %define_sprite_table(sprite_tweaker_1686, $1686, $762C)
 %define_sprite_table(sprite_off_screen_vert, $186C, $7642)
 %define_sprite_table(sprite_misc_187b, $187B, $3410)
-%define_sprite_table(sprite_load_table, $1938, $418A00)
+
+%define_sprite_table(sprite_load_table, $7FAF00, $418A00)
+
 %define_sprite_table(sprite_tweaker_190f, $190F, $7658)
 %define_sprite_table(sprite_misc_1fd6, $1FD6, $766E)
 %define_sprite_table(sprite_cape_disable_time, $1FE2, $7FD6)
@@ -260,6 +302,15 @@ endmacro
 %define_sprite_table("186C", $186C, $7642)
 %define_sprite_table("187B", $187B, $3410)
 %define_sprite_table("190F", $190F, $7658)
-%define_sprite_table("1938", $1938, $418A00)
+
+if !Disable255SpritesPerLevel
+	%define_sprite_table("1938", $1938, $418A00)
+	%define_sprite_table(sprite_load_table, $1938, $418A00)
+else
+	%define_sprite_table("1938", $7FAF00, $418A00)
+	%define_sprite_table("7FAF00", $7FAF00, $418A00)
+	%define_sprite_table(sprite_load_table, $7FAF00, $418A00)
+endif
+
 %define_sprite_table("1FD6", $1FD6, $766E)
 %define_sprite_table("1FE2", $1FE2, $7FD6)
